@@ -30,13 +30,96 @@ namespace MusicPlayer
         private void InitializePlayer()
         {
             outputDevice = new WaveOutEvent();
-            outputDevice.PlaybackStopped += OutputDevice_PlaybackStopped;
+            outputDevice.PlaybackStopped += (sender, e) =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    if (isRepeatMode)
+                    {
+                        PlayCurrentTrack();
+                    }
+                    else
+                    {
+                        NextTrack();
+                    }
+                });
+            };
 
-            progressTimer = new DispatcherTimer();
-            progressTimer.Interval = TimeSpan.FromMilliseconds(200);
-            progressTimer.Tick += ProgressTimer_Tick;
+            progressTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+            progressTimer.Tick += (sender, e) => UpdateProgress();
+        }
 
-            VolumeSlider.Value = 50;
+        private void PlayCurrentTrack()
+        {
+            if (songs.Count == 0 || currentTrackIndex < 0) return;
+
+            try
+            {
+
+                outputDevice?.Stop();
+                audioFile?.Dispose();
+
+
+                audioFile = new AudioFileReader(songs[currentTrackIndex]);
+                outputDevice.Init(audioFile);
+                outputDevice.Play();
+
+                // Aktualizacja UI
+                UpdateSongInfo();
+                progressTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Błąd odtwarzania: {ex.Message}");
+            }
+        }
+
+        private void UpdateSongInfo()
+        {
+            var currentSong = songs[currentTrackIndex];
+            SongTitle.Text = Path.GetFileNameWithoutExtension(currentSong);
+
+            if (audioFile != null)
+            {
+                SongInfo.Text = $"Bitrate: {audioFile.WaveFormat.AverageBytesPerSecond * 8 / 1000}kbps | Sample rate: {audioFile.WaveFormat.SampleRate}Hz";
+                ProgressBar.Maximum = audioFile.TotalTime.TotalSeconds;
+            }
+        }
+
+        private void UpdateProgress()
+        {
+            if (audioFile != null)
+            {
+                ProgressBar.Value = audioFile.CurrentTime.TotalSeconds;
+                CurrentTime.Text = $"{audioFile.CurrentTime:mm\\:ss} / {audioFile.TotalTime:mm\\:ss}";
+            }
+        }
+
+        private void NextTrack()
+        {
+            if (isShuffleMode)
+            {
+                currentTrackIndex = new Random().Next(0, songs.Count);
+            }
+            else
+            {
+                currentTrackIndex = (currentTrackIndex + 1) % songs.Count;
+            }
+            PlayCurrentTrack();
+        }
+
+        private void PreviousTrack()
+        {
+            if (audioFile?.CurrentTime.TotalSeconds > 3)
+            {
+                audioFile.CurrentTime = TimeSpan.Zero;
+            }
+            else
+            {
+
+                currentTrackIndex = (currentTrackIndex - 1 + songs.Count) % songs.Count;
+                PlayCurrentTrack();
+            }
         }
 
         private void LoadMusicFiles()
@@ -80,7 +163,7 @@ namespace MusicPlayer
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error playing track: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Błąd odtwarzania: {ex.Message}", "Błąd", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -95,16 +178,34 @@ namespace MusicPlayer
 
         private void PlayButton_Click(object sender, RoutedEventArgs e)
         {
-            if (songs.Count == 0) return;
-
-            if (outputDevice?.PlaybackState == PlaybackState.Stopped && audioFile == null)
+            if (outputDevice?.PlaybackState == PlaybackState.Paused)
+            {
+                outputDevice.Play();
+            }
+            else if (currentTrackIndex >= 0)
             {
                 PlayCurrentTrack();
             }
-            else
-            {
-                outputDevice?.Play();
-            }
+        }
+
+        private void PauseButton_Click(object sender, RoutedEventArgs e)
+        {
+            outputDevice?.Pause();
+        }
+
+        private void NextButton_Click(object sender, RoutedEventArgs e) => NextTrack();
+        private void PreviousButton_Click(object sender, RoutedEventArgs e) => PreviousTrack();
+
+        private void RepeatButton_Click(object sender, RoutedEventArgs e)
+        {
+            isRepeatMode = !isRepeatMode;
+            RepeatButton.Content = isRepeatMode ? "🔂" : "🔁";
+        }
+
+        private void ShuffleButton_Click(object sender, RoutedEventArgs e)
+        {
+            isShuffleMode = !isShuffleMode;
+            ShuffleButton.Content = isShuffleMode ? "🔀 ON" : "🔀";
         }
 
         private void PauseButton_Click(object sender, RoutedEventArgs e)
@@ -147,7 +248,6 @@ namespace MusicPlayer
                 {
                     currentTrackIndex = songs.Count - 1;
                 }
-
                 PlayCurrentTrack();
             }
         }
@@ -168,20 +268,19 @@ namespace MusicPlayer
             {
                 currentTrackIndex = 0;
             }
-
             PlayCurrentTrack();
         }
 
         private void RepeatButton_Click(object sender, RoutedEventArgs e)
         {
             isRepeatMode = !isRepeatMode;
-            RepeatButton.Content = isRepeatMode ? "🔂 Repeat" : "🔁 Repeat";
+            RepeatButton.Content = isRepeatMode ? "🔂" : "🔁";
         }
 
         private void ShuffleButton_Click(object sender, RoutedEventArgs e)
         {
             isShuffleMode = !isShuffleMode;
-            ShuffleButton.Content = isShuffleMode ? "🔀 Shuffle ON" : "🔀 Shuffle";
+            ShuffleButton.Content = isShuffleMode ? "🔀 ON" : "🔀";
         }
 
         private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -235,8 +334,7 @@ namespace MusicPlayer
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            if (value == null) return string.Empty;
-            return System.IO.Path.GetFileNameWithoutExtension(value.ToString());
+            return System.IO.Path.GetFileNameWithoutExtension(value?.ToString() ?? string.Empty);
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

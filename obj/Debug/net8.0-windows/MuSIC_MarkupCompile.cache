@@ -8,12 +8,12 @@ C:\Users\julia\OneDrive\Pulpit\vsc\2023-2024\TIDA\Music\MuSIC\MuSIC\obj\Debug\ne
 MuSIC
 none
 false
-TRACE;DEBUG;NET;NET8_0;NETCOREAPP
+TRACE;RELEASE;NET;NET8_0;NETCOREAPP
 C:\Users\julia\OneDrive\Pulpit\vsc\2023-2024\TIDA\Music\MuSIC\MuSIC\App.xaml
 11407045341
 
-42102464460
-243-1413491422
+7405326492
+4861467984452
 MainWindow.xaml;
 
 True
